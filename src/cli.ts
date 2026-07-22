@@ -30,7 +30,13 @@ async function main() {
         const answer = await askBot(question);
         console.log('\n' + answer + '\n');
       } catch (err) {
-        console.error('Error:', err instanceof Error ? err.message : String(err));
+        if (err instanceof Error) {
+          console.error('Error:', err.message);
+          const cause = (err as any).cause?.response?.data;
+          if (cause) console.error('Cause:', JSON.stringify(cause, null, 2));
+        } else {
+          console.error('Error:', String(err));
+        }
       }
       ask();
     });
