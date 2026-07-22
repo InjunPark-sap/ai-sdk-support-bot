@@ -162,17 +162,54 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
       : Promise.resolve([])
   ]);
 
-  const docs = (typeof docsRaw === 'string' ? docsRaw : JSON.stringify(docsRaw))
+  const rawDocs = typeof docsRaw === 'string' ? docsRaw : JSON.stringify(docsRaw);
+
+  // Extract code snippets before slicing for a dedicated section
+  const codeExamples = (rawDocs.match(/```[\s\S]*?```/g) ?? [])
+    .slice(0, 3)
+    .join('\n\n')
+    .slice(0, 1500)
+    .replace(/\{\{/g, '{ {');
+
+  // Escape {{ everywhere — Orchestration service parses ALL {{?...}} in system prompt,
+  // including inside code blocks. Display is slightly uglier but avoids 400 errors.
+  const docs = rawDocs
     .slice(0, CONTEXT.DOCS)
     .replace(/\{\{/g, '{ {');
-  const issues = dedupeAndFormat([
+
+  const allIssues = dedupeAndFormat([
     parseIssues(exactRaw),
     parseIssues(keywordRaw),
     parseIssues(techRaw),
     parseIssues(errorCodeRaw),
     parseIssues(domainRaw),
-    parseIssues(errorMsgRaw)   // most precise — finds fix PRs like #2058
+    parseIssues(errorMsgRaw)
   ]);
+
+  // Fetch full body of top 3 issues for solution details
+  const topIssueNumbers = [
+    ...parseIssues(exactRaw),
+    ...parseIssues(keywordRaw),
+    ...parseIssues(techRaw)
+  ]
+    .filter((v, i, a) => a.findIndex(x => x.number === v.number) === i)
+    .slice(0, 3)
+    .map(i => i.number);
+
+  const issueDetails = (
+    await Promise.all(
+      topIssueNumbers.map(n =>
+        getTool('github__get_issue')
+          .invoke({ owner: 'SAP', repo: 'ai-sdk-js', issue_number: n })
+          .then(raw => {
+            const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            const body = (d.body ?? '').slice(0, 600);
+            return `#${d.number} [${d.state}] ${d.title}\n${body}`;
+          })
+          .catch(() => '')
+      )
+    )
+  ).filter(Boolean).join('\n\n---\n\n');
 
   const systemPrompt = [
     'You are an SAP AI SDK support assistant.',
@@ -194,9 +231,15 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
     '=== DOCUMENTATION ===',
     docs,
     '',
-    '=== GITHUB ISSUES ===',
-    issues
-  ].join('\n');
+    codeExamples ? '=== CODE EXAMPLES FROM DOCS ===' : '',
+    codeExamples,
+    '',
+    '=== GITHUB ISSUES (summary) ===',
+    allIssues,
+    '',
+    issueDetails ? '=== ISSUE DETAILS (top matches) ===' : '',
+    issueDetails
+  ].filter(s => s !== undefined).join('\n');
 
   return parser.invoke(
     await model.invoke([new SystemMessage(systemPrompt), new HumanMessage(fullQuestion)])
