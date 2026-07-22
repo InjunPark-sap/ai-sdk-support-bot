@@ -227,6 +227,8 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
     '- Do NOT include dependency bumps, chore PRs, or unrelated feature requests.',
     '- If no issues genuinely match, write "No related issues found." — do not force-include.',
     '- Do NOT invent issue numbers — only use issues explicitly listed in the context below.',
+    '- Do NOT present open feature requests or unmerged PRs as existing functionality.',
+    '  If an issue is open or a PR is not merged, clearly state it is not yet available.',
     '',
     '=== DOCUMENTATION ===',
     docs,
