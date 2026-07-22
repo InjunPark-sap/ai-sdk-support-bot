@@ -77,10 +77,16 @@ const DOMAIN_TERMS = new Set([
   'langchain', 'template', 'deployment', 'destination', 'resilience', 'caching'
 ]);
 
-// Split camelCase into words and filter stopwords for broader similarity search
-function extractKeywords(question: string): string {
-  return question
-    .replace(/([a-z])([A-Z])/g, '$1 $2')   // camelCase → separate words
+// SAP AI SDK class name prefixes — only these count as tech terms for in:title search
+const SDK_PREFIXES = [
+  'Orchestration', 'AzureOpenAi', 'Foundation', 'Embedding',
+  'LangChain', 'Grounding', 'Document', 'Prompt', 'Masking'
+];
+
+// Split camelCase, filter stopwords — applied to title only for search queries
+function extractKeywords(text: string): string {
+  return text
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length > 3 && (!STOPWORDS.has(w.toLowerCase()) || DOMAIN_TERMS.has(w.toLowerCase())))
@@ -88,49 +94,59 @@ function extractKeywords(question: string): string {
     .join(' ');
 }
 
-// Extract class/package names (PascalCase or @scope/package) for title-targeted search
-function extractTechTerms(question: string): string {
-  const camel = [...question.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)].map(m => m[0]);
-  const pkg = [...question.matchAll(/@[\w-]+\/[\w-]+/g)].map(m => m[0]);
-  return [...new Set([...camel, ...pkg])].slice(0, 3).join(' ');
+// Only SDK class/package names — filters out common English words like "When", "How"
+function extractTechTerms(text: string): string {
+  const sdkClasses = [...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)]
+    .map(m => m[0])
+    .filter(w => SDK_PREFIXES.some(p => w.startsWith(p)));
+  const pkg = [...text.matchAll(/@[\w-]+\/[\w-]+/g)].map(m => m[0]);
+  return [...new Set([...sdkClasses, ...pkg])].slice(0, 3).join(' ');
 }
 
-// Extract HTTP status code if present (e.g. "500", "400") for targeted error search
-function extractErrorCode(question: string): string | null {
-  const match = question.match(/\b([45]\d{2})\b/);
+// Extract HTTP status code if present
+function extractErrorCode(text: string): string | null {
+  const match = text.match(/\b([45]\d{2})\b/);
   return match ? match[1] : null;
+}
+
+// Extract domain terms for in:title search
+function extractDomainHits(text: string): string {
+  return text.toLowerCase().split(/\s+/).filter(w => DOMAIN_TERMS.has(w)).slice(0, 2).join(' ');
 }
 
 export async function initAgent(): Promise<void> {
   tools = await mcpClient.getTools();
   const group = (prefix: string) =>
     tools.filter(t => t.name.startsWith(prefix)).map(t => t.name.replace(prefix, '')).join(', ');
-  console.log(`  context7  ${group('context7__')}`);
-  console.log(`  github    ${group('github__')}`);
+  console.error(`  context7  ${group('context7__')}`);
+  console.error(`  github    ${group('github__')}`);
 }
 
 export async function closeAgent(): Promise<void> {
   await mcpClient.close();
 }
 
-export async function askBot(question: string): Promise<string> {
+export async function askBot(title: string, body?: string, errorMessages?: string[]): Promise<string> {
   if (!tools.length) throw new Error('Agent not initialized. Call initAgent() first.');
 
-  const keywords = extractKeywords(question);
-  const techTerms = extractTechTerms(question);
-  const errorCode = extractErrorCode(question);
+  // Search queries: title only (body has code/stack traces that pollute search)
+  // Docs query + LLM context: title + body (full context)
+  const searchText = title;
+  const fullQuestion = body ? `${title}\n\n${body}` : title;
 
-  // Extract domain terms (lowercase SDK concepts) for in:title search
-  const domainHits = question
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(w => DOMAIN_TERMS.has(w))
-    .slice(0, 2)
-    .join(' ');
+  const keywords = extractKeywords(searchText);
+  const techTerms = extractTechTerms(searchText);
+  const errorCode = extractErrorCode(body ?? searchText);
+  const domainHits = extractDomainHits(searchText);
 
-  const [docsRaw, exactRaw, keywordRaw, techRaw, errorRaw, domainRaw] = await Promise.all([
-    getTool('context7__query-docs').invoke({ libraryId: LIBRARY_ID, query: question }),
-    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${question}`, per_page: 5 }),
+  // errorMessages from parsed issue body — most precise search signal
+  const errorQuery = errorMessages?.length
+    ? errorMessages[0].replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3).slice(0, 6).join(' ')
+    : null;
+
+  const [docsRaw, exactRaw, keywordRaw, techRaw, errorCodeRaw, domainRaw, errorMsgRaw] = await Promise.all([
+    getTool('context7__query-docs').invoke({ libraryId: LIBRARY_ID, query: fullQuestion }),
+    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${searchText}`, per_page: 5 }),
     getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${keywords}`, per_page: 5 }),
     techTerms
       ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${techTerms} in:title`, per_page: 5 })
@@ -140,6 +156,9 @@ export async function askBot(question: string): Promise<string> {
       : Promise.resolve([]),
     domainHits
       ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${domainHits} in:title`, per_page: 5 })
+      : Promise.resolve([]),
+    errorQuery
+      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorQuery}`, per_page: 5 })
       : Promise.resolve([])
   ]);
 
@@ -150,8 +169,9 @@ export async function askBot(question: string): Promise<string> {
     parseIssues(exactRaw),
     parseIssues(keywordRaw),
     parseIssues(techRaw),
-    parseIssues(errorRaw),
-    parseIssues(domainRaw)
+    parseIssues(errorCodeRaw),
+    parseIssues(domainRaw),
+    parseIssues(errorMsgRaw)   // most precise — finds fix PRs like #2058
   ]);
 
   const systemPrompt = [
@@ -179,7 +199,7 @@ export async function askBot(question: string): Promise<string> {
   ].join('\n');
 
   return parser.invoke(
-    await model.invoke([new SystemMessage(systemPrompt), new HumanMessage(question)])
+    await model.invoke([new SystemMessage(systemPrompt), new HumanMessage(fullQuestion)])
   );
 }
 

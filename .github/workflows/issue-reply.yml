@@ -33,8 +33,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          printf '%s\n\n%s' "$ISSUE_TITLE" "$ISSUE_BODY" > /tmp/question.txt
-          npx tsx --env-file=/dev/null src/reply.ts "$(cat /tmp/question.txt)" > /tmp/answer.md
+          npx tsx --env-file=/dev/null src/reply.ts "$ISSUE_TITLE" "$ISSUE_BODY" > /tmp/answer.md
 
       - name: Post comment
         env:
