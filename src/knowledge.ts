@@ -25,8 +25,10 @@ export const SDK_KNOWLEDGE = `
 
 ### @sap-ai-sdk/orchestration — OrchestrationStreamResponse
 - stream → AsyncIterable<OrchestrationStreamChunkResponse>
-- getDeltaContent(choiceIndex?) → string | undefined  (on each chunk)
 - getRequestId() → string | undefined
+
+### @sap-ai-sdk/orchestration — OrchestrationStreamChunkResponse
+- getDeltaContent(choiceIndex?) → string | undefined  (delta text of a single streaming chunk)
 
 ### @sap-ai-sdk/langchain — OrchestrationClient (LangChain wrapper)
 - Extends BaseChatModel — use invoke(), stream(), bindTools(), withStructuredOutput()
@@ -49,8 +51,8 @@ export const SDK_KNOWLEDGE = `
 - Pass values via chatCompletion({ placeholderValues: { variableName: 'value' } })
 
 ### SAP AI Core model names
-- Format for non-Azure models: '<provider>--<model-name>' e.g. 'anthropic--claude-4-5-haiku', 'anthropic--claude-4-5-sonnet'
-- Format for Azure OpenAI models: direct deployment name e.g. 'gpt-4o', 'gpt-4-32k'
-- NEVER use 'gpt-5', 'gpt-5.2', 'gpt-4-turbo', 'Claude 3.5 Sonnet' — these are not valid SAP AI Core model names
+- Format for non-Azure models: '<provider>--<model-name>' e.g. 'anthropic--claude-4.5-haiku', 'anthropic--claude-4.5-sonnet'
+- Format for Azure OpenAI models: direct deployment name e.g. 'gpt-4o', 'gpt-4-32k', 'gpt-5', 'gpt-5.2'
+- NEVER use 'claude-3-opus', 'Claude 3.5 Sonnet' — these are not valid SAP AI Core model names (wrong format)
 - In code examples, use '<your-model-name>' as placeholder when the specific model is unknown
 `.trim();

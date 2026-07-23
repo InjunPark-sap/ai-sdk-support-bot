@@ -66,7 +66,8 @@ export async function semanticSearch(query: string, topK = 5): Promise<IssueRef[
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
       .map(({ number, title, state, resolution }) => ({ number, title, state, resolution }));
-  } catch {
+  } catch (err) {
+    console.error('semanticSearch: embedding query failed', err instanceof Error ? err.message : err);
     return [];
   }
 }
