@@ -8,6 +8,7 @@ jobs:
   reply:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
 
     steps:
@@ -23,7 +24,39 @@ jobs:
           version: 10
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Post issue to Slack
+        id: slack_post
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          BODY_PREVIEW=$(echo "$ISSUE_BODY" | head -c 400)
+          PAYLOAD=$(jq -n \
+            --arg channel  "$SLACK_CHANNEL_ID" \
+            --arg number   "$ISSUE_NUMBER" \
+            --arg title    "$ISSUE_TITLE" \
+            --arg preview  "$BODY_PREVIEW" \
+            --arg url      "$ISSUE_URL" \
+            '{
+              channel: $channel,
+              text: ("*New Issue #" + $number + ":* " + $title + "\n" + $preview + "\n" + $url)
+            }')
+          RESPONSE=$(curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          if [ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]; then
+            echo "Slack error: $(echo "$RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
+          echo "thread_ts=$(echo "$RESPONSE" | jq -r '.ts')" >> "$GITHUB_OUTPUT"
 
       - name: Generate answer
         id: answer
@@ -35,10 +68,37 @@ jobs:
         run: |
           npx tsx --env-file=/dev/null src/reply.ts "$ISSUE_TITLE" "$ISSUE_BODY" > /tmp/answer.md
 
-      - name: Post comment
+      - name: Reply bot answer in Slack thread
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          THREAD_TS: ${{ steps.slack_post.outputs.thread_ts }}
+        run: |
+          if [ -z "$THREAD_TS" ] || [ "$THREAD_TS" = "null" ]; then
+            echo "No thread_ts available — skipping Slack thread reply"
+            exit 0
+          fi
+          ANSWER=$(cat /tmp/answer.md)
+          PAYLOAD=$(jq -n \
+            --arg channel   "$SLACK_CHANNEL_ID" \
+            --arg thread_ts "$THREAD_TS" \
+            --arg text      "$ANSWER" \
+            '{channel: $channel, thread_ts: $thread_ts, text: $text}')
+          RESPONSE=$(curl -sf -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          if [ "$(echo "$RESPONSE" | jq -r '.ok')" != "true" ]; then
+            echo "Slack error: $(echo "$RESPONSE" | jq -r '.error')"
+            exit 1
+          fi
+
+      - name: Post comment on GitHub issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$ISSUE_NUMBER" \
             --repo ${{ github.repository }} \
             --body-file /tmp/answer.md
