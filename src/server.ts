@@ -61,3 +61,8 @@ process.on('SIGINT', async () => {
   await closeAgent();
   process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  await closeAgent();
+  process.exit(0);
+});

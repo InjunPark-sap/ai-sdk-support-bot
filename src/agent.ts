@@ -131,16 +131,13 @@ export async function closeAgent(): Promise<void> {
   await mcpClient.close();
 }
 
-export async function askBot(title: string, body?: string, errorMessages?: string[]): Promise<string> {
+export async function askBot(title: string, body?: string): Promise<string> {
   if (!tools.length) throw new Error('Agent not initialized. Call initAgent() first.');
 
   // Apply esc() to all user-controlled content entering the message chain (M-1)
   const parts = [
     'Question: ' + esc(title),
-    body ? esc(body) : null,
-    errorMessages?.length
-      ? 'Error messages:\n' + errorMessages.map(e => '- ' + esc(e)).join('\n')
-      : null
+    body ? esc(body) : null
   ].filter(Boolean).join('\n\n');
 
   const messages: BaseMessage[] = [

@@ -6,7 +6,14 @@ on:
 
 jobs:
   reply:
+    # SEC-1: only respond to trusted contributors — blocks quota abuse from anonymous filers
+    if: contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # SEC-1: one run per issue at a time — prevents duplicate replies
+    concurrency:
+      group: issue-reply-${{ github.event.issue.number }}
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write
@@ -60,6 +67,7 @@ jobs:
 
       - name: Generate answer
         id: answer
+        timeout-minutes: 5
         env:
           AICORE_SERVICE_KEY: ${{ secrets.AICORE_SERVICE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -100,5 +108,5 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           gh issue comment "$ISSUE_NUMBER" \
-            --repo ${{ github.repository }} \
+            --repo "$GITHUB_REPOSITORY" \
             --body-file /tmp/answer.md

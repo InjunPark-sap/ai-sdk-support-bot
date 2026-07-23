@@ -75,9 +75,9 @@ const enrichedBody = [
 ].filter(Boolean).join('\n\n');
 
 // H-1: closeAgent() always runs — even if askBot() throws
-await initAgent();
 try {
-  const answer = await askBot(title, enrichedBody || undefined, errorMessages);
+  await initAgent();
+  const answer = await askBot(title, enrichedBody || undefined);
   // Output only the answer — captured by GitHub Action
   process.stdout.write(answer);
 } finally {
