@@ -9,6 +9,7 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 // Context budget: SAP AI Core haiku has ~8k input token limit
 // chars ≈ tokens * 4  →  docs:4000 chars + issues:2000 chars + prompt overhead ≈ safe
 const CONTEXT = { DOCS: 4000, ISSUE_BODY: 150, MAX_ISSUES: 12 } as const;
+const PER_PAGE = 8; // per GitHub search query — 7 queries × 8 = 56 raw candidates → ~24 unique after dedup
 
 // Best match from context7 resolve: Benchmark 83, 532 snippets
 const LIBRARY_ID = '/websites/sap_github_io_ai-sdk_js';
@@ -149,19 +150,19 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
 
   const [docsRaw, exactRaw, keywordRaw, techRaw, errorCodeRaw, domainRaw, errorMsgRaw, semanticRaw] = await Promise.all([
     getTool('context7__query-docs').invoke({ libraryId: LIBRARY_ID, query: fullQuestion }),
-    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${searchText}`, per_page: 5 }),
-    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${keywords}`, per_page: 5 }),
+    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${searchText}`, per_page: PER_PAGE }),
+    getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${keywords}`, per_page: PER_PAGE }),
     techTerms
-      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${techTerms} in:title`, per_page: 5 })
+      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${techTerms} in:title`, per_page: PER_PAGE })
       : Promise.resolve([]),
     errorCode
-      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorCode} ${keywords}`, per_page: 5 })
+      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorCode} ${keywords}`, per_page: PER_PAGE })
       : Promise.resolve([]),
     domainHits
-      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${domainHits} in:title`, per_page: 5 })
+      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${domainHits} in:title`, per_page: PER_PAGE })
       : Promise.resolve([]),
     errorQuery
-      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorQuery}`, per_page: 5 })
+      ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorQuery}`, per_page: PER_PAGE })
       : Promise.resolve([]),
     semanticSearch(searchText)
   ]);
