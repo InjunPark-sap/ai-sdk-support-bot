@@ -9,8 +9,13 @@ if (!GH_TOKEN) throw new Error('GITHUB_TOKEN is required');
 const BATCH = 20;
 const OUT_PATH = join(dirname(fileURLToPath(import.meta.url)), '../src/issue-embeddings.json');
 
-type GHIssue = { number: number; title: string; state: string; pull_request?: unknown };
+type GHIssue = { number: number; title: string; state: string; body?: string; pull_request?: unknown };
 type IndexEntry = { number: number; title: string; state: string; embedding: number[] };
+
+function extractBugDescription(body: string): string {
+  const re = /###\s*(?:Describe the Bug|Describe the Question)\s*\n([\s\S]*?)(?=###|$)/i;
+  return (body.match(re)?.[1] ?? '').trim().slice(0, 200);
+}
 
 async function fetchAllIssues(): Promise<GHIssue[]> {
   const issues: GHIssue[] = [];
@@ -44,7 +49,10 @@ async function main() {
 
   for (let i = 0; i < issues.length; i += BATCH) {
     const batch = issues.slice(i, i + BATCH);
-    const texts = batch.map(iss => iss.title);
+    const texts = batch.map(iss => {
+      const bugDesc = extractBugDescription(iss.body ?? '');
+      return bugDesc ? `${iss.title}\n${bugDesc}` : iss.title;
+    });
     const resp = await client.embed({ input: texts });
     const embeddings = resp.getEmbeddings();
     for (const emb of embeddings) {
