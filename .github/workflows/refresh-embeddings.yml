@@ -1,0 +1,41 @@
+name: Refresh Issue Embeddings
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday 3am UTC
+  workflow_dispatch:      # Manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Refresh embeddings
+        env:
+          AICORE_SERVICE_KEY: ${{ secrets.AICORE_SERVICE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm refresh
+
+      - name: Commit updated index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/issue-embeddings.json
+          git diff --staged --quiet || git commit -m "chore: refresh issue embeddings"
+          git push

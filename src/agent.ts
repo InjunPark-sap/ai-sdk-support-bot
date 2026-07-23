@@ -2,6 +2,8 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { OrchestrationClient } from '@sap-ai-sdk/langchain';
+import { loadEmbeddingIndex, semanticSearch } from './embeddings.js';
+import { SDK_KNOWLEDGE } from './knowledge.js';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 
 // Context budget: SAP AI Core haiku has ~8k input token limit
@@ -67,7 +69,7 @@ function dedupeAndFormat(lists: IssueItem[][]): string {
     .flat()
     .filter(i => !seen.has(i.number) && seen.add(i.number))
     .slice(0, CONTEXT.MAX_ISSUES)
-    .map(i => `#${i.number} [${i.state}] ${i.title}\n${(i.body ?? '').slice(0, CONTEXT.ISSUE_BODY)}`)
+    .map(i => `#${i.number} [${i.state}] ${i.title}\n${(i.body ?? '').slice(0, CONTEXT.ISSUE_BODY).replace(/\{\{/g, '{ {')}`)
     .join('\n\n');
 }
 
@@ -120,6 +122,7 @@ export async function initAgent(): Promise<void> {
     tools.filter(t => t.name.startsWith(prefix)).map(t => t.name.replace(prefix, '')).join(', ');
   console.error(`  context7  ${group('context7__')}`);
   console.error(`  github    ${group('github__')}`);
+  loadEmbeddingIndex();
 }
 
 export async function closeAgent(): Promise<void> {
@@ -144,7 +147,7 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
     ? errorMessages[0].replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length > 3).slice(0, 6).join(' ')
     : null;
 
-  const [docsRaw, exactRaw, keywordRaw, techRaw, errorCodeRaw, domainRaw, errorMsgRaw] = await Promise.all([
+  const [docsRaw, exactRaw, keywordRaw, techRaw, errorCodeRaw, domainRaw, errorMsgRaw, semanticRaw] = await Promise.all([
     getTool('context7__query-docs').invoke({ libraryId: LIBRARY_ID, query: fullQuestion }),
     getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${searchText}`, per_page: 5 }),
     getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${keywords}`, per_page: 5 }),
@@ -159,7 +162,8 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
       : Promise.resolve([]),
     errorQuery
       ? getTool('github__search_issues').invoke({ q: `repo:SAP/ai-sdk-js ${errorQuery}`, per_page: 5 })
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    semanticSearch(searchText)
   ]);
 
   const rawDocs = typeof docsRaw === 'string' ? docsRaw : JSON.stringify(docsRaw);
@@ -183,7 +187,8 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
     parseIssues(techRaw),
     parseIssues(errorCodeRaw),
     parseIssues(domainRaw),
-    parseIssues(errorMsgRaw)
+    parseIssues(errorMsgRaw),
+    semanticRaw as IssueItem[]
   ]);
 
   // Fetch full body of top 3 issues for solution details
@@ -203,7 +208,7 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
           .invoke({ owner: 'SAP', repo: 'ai-sdk-js', issue_number: n })
           .then(raw => {
             const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            const body = (d.body ?? '').slice(0, 600);
+            const body = (d.body ?? '').slice(0, 600).replace(/\{\{/g, '{ {');
             return `#${d.number} [${d.state}] ${d.title}\n${body}`;
           })
           .catch(() => '')
@@ -216,9 +221,8 @@ export async function askBot(title: string, body?: string, errorMessages?: strin
     'Answer ONLY based on the provided context below.',
     'Cite doc section titles or GitHub issue numbers (#xxx) in your answer.',
     'IMPORTANT: The SAP AI SDK uses these exact method names:',
-    '  - OrchestrationClient: chatCompletion(), stream() — NOT streamChat()',
-    '  - AzureOpenAiChatClient: run(), stream() — NOT streamChat()',
-    '  If the documentation shows an incorrect method name, use the correct one above.',
+    SDK_KNOWLEDGE,
+    'If the documentation shows an incorrect method name, use the correct one above.',
     '',
     'At the end of EVERY answer, include a "## Related Issues" section.',
     'STRICT rules for Related Issues:',

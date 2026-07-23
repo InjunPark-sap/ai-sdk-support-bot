@@ -6,12 +6,14 @@
   "scripts": {
     "start": "tsx --env-file=.env src/cli.ts",
     "serve": "tsx --env-file=.env src/server.ts",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "refresh": "tsx --env-file=.env scripts/refresh-embeddings.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.2.1",
     "@langchain/mcp-adapters": "^1.1.3",
     "@sap-ai-sdk/langchain": "^2.13.0",
+    "@sap-ai-sdk/orchestration": "^2.13.0",
     "express": "^5.2.1"
   },
   "devDependencies": {

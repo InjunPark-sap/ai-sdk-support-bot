@@ -17,6 +17,9 @@ importers:
       '@sap-ai-sdk/langchain':
         specifier: ^2.13.0
         version: 2.13.0(@langchain/core@1.2.3)
+      '@sap-ai-sdk/orchestration':
+        specifier: ^2.13.0
+        version: 2.13.0
       express:
         specifier: ^5.2.1
         version: 5.2.1
