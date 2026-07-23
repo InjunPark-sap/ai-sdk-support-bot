@@ -8,7 +8,7 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 
 // Context budget: SAP AI Core haiku has ~8k input token limit
 // chars ≈ tokens * 4  →  docs:4000 chars + issues:2000 chars + prompt overhead ≈ safe
-const CONTEXT = { DOCS: 4000, ISSUE_BODY: 150, MAX_ISSUES: 8 } as const;
+const CONTEXT = { DOCS: 4000, ISSUE_BODY: 150, MAX_ISSUES: 12 } as const;
 
 // Best match from context7 resolve: Benchmark 83, 532 snippets
 const LIBRARY_ID = '/websites/sap_github_io_ai-sdk_js';
