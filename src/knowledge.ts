@@ -47,4 +47,10 @@ export const SDK_KNOWLEDGE = `
 ### Prompt template syntax
 - Placeholder: { {?variableName}} (curly braces with question mark)
 - Pass values via chatCompletion({ placeholderValues: { variableName: 'value' } })
+
+### SAP AI Core model names
+- Format for non-Azure models: '<provider>--<model-name>' e.g. 'anthropic--claude-4-5-haiku', 'anthropic--claude-4-5-sonnet'
+- Format for Azure OpenAI models: direct deployment name e.g. 'gpt-4o', 'gpt-4-32k'
+- NEVER use 'gpt-5', 'gpt-5.2', 'gpt-4-turbo', 'Claude 3.5 Sonnet' — these are not valid SAP AI Core model names
+- In code examples, use '<your-model-name>' as placeholder when the specific model is unknown
 `.trim();
