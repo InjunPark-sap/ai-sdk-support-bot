@@ -55,4 +55,8 @@ export const SDK_KNOWLEDGE = `
 - Format for Azure OpenAI models: direct deployment name e.g. 'gpt-4o', 'gpt-4-32k', 'gpt-5', 'gpt-5.2'
 - NEVER use 'claude-3-opus', 'Claude 3.5 Sonnet' — these are not valid SAP AI Core model names (wrong format)
 - In code examples, use '<your-model-name>' as placeholder when the specific model is unknown
+- Reasoning models (gpt-5*, gpt-5.2*, o1*, o3*) via @sap-ai-sdk/langchain: max_tokens is
+  automatically renamed to max_completion_tokens — this is a CONVERSION, not a failure.
+  temperature is passed through unchanged. Direct AzureOpenAiChatClient (non-LangChain) users
+  must use max_completion_tokens manually.
 `.trim();
