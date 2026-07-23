@@ -49,7 +49,7 @@ async function fetchAllIssues(): Promise<GHIssue[]> {
 // Medium-4: filter by user.type !== 'Bot' in addition to [bot] login check
 async function fetchLastComment(issueNumber: number): Promise<string | undefined> {
   const resp = await fetch(
-    `https://api.github.com/repos/SAP/ai-sdk-js/issues/${issueNumber}/comments?per_page=100&direction=desc`,
+    `https://api.github.com/repos/SAP/ai-sdk-js/issues/${issueNumber}/comments?per_page=100`,
     { headers: GH_HEADERS }
   );
   if (!resp.ok) return undefined;
